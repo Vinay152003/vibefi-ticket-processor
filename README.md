@@ -153,5 +153,6 @@ A short note on scaling (cache decisions, queue heavy LLM jobs via background wo
 10) Quick “reply” text you can paste to VibeFI AI
 
 Hi VibeFI AI team — thanks for the brief. I implemented a small FastAPI service that accepts a ticket JSON, applies a rule-first decision engine (with LLM fallback), and returns {decision, reasoning, checklist}.
-Repo: (add link) — includes core logic, prompts, example tickets, and tests.
+Repo: https://github.com/Vinay152003/vibefi-ticket-processor
+— includes core logic, prompts, example tickets, and tests.
 Key notes: rules handle high-confidence cases (error traces → ai_code_patch); LLM is used for ambiguous classification and for generating minimal code patches or Vibe-coded workflows. I included validation steps, human-in-the-loop gating for code patches, and test cases. Happy to demo or iterate on the prompt & thresholds.
