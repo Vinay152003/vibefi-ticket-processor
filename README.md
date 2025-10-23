@@ -1,158 +1,164 @@
 # vibefi-ticket-processor
-1) Short architecture & approach
 
-Goal: Small service that ingests a JSON ticket, decides whether to generate an AI code patch (LLM-assisted) or return a Vibe-coded troubleshooting workflow, and returns a structured response: { decision, reasoning, checklist }.
+## Short Architecture & Approach
 
-Approach:
+**Goal:**  
+A small service that ingests a JSON ticket, decides whether to generate an **AI code patch** (LLM-assisted) or return a **Vibe-coded troubleshooting workflow**, and returns a structured response:  
+`{ decision, reasoning, checklist }`
 
-Lightweight rule-first decision layer (severity, channel, keywords) to be fast and deterministic for common cases.
+### Approach
+- Lightweight **rule-first decision layer** (severity, channel, keywords) for fast, deterministic classification.
+- Where rules are ambiguous or require code reasoning, call an **LLM** to classify and generate the appropriate remediation or workflow.
+- Always include structured **reasoning** and a short **checklist** of next actions.
+- Exposed via a simple **FastAPI HTTP API** with JSON input/output for easy integration.
 
-Where rules are ambiguous or require code reasoning, call an LLM to classify + generate remediation (AI code patch) or to generate a step-by-step Vibe-coded workflow.
+### Why Rule-First + LLM?
+- **Rules** provide predictable, low-latency behavior for straightforward, high-frequency cases.  
+- **LLMs** handle nuanced tickets requiring reasoning or producing human-friendly remediation plans.
 
-Always include structured reasoning and a short checklist of next actions.
+---
 
-Expose via a simple HTTP API (FastAPI) with JSON in/out for easy integration.
+## Suggested Repo Structure
 
-Why rule-first + LLM?
-
-Rules give predictable, low-latency behavior for straightforward, high-frequency patterns.
-
-LLM used when nuance or code reasoning is required — or to produce human-friendly remediation steps.
-
-2) Suggested repo structure
 vibefi-ticket-processor/
 ├─ app/
-│  ├─ main.py              # FastAPI app (entry)
-│  ├─ decision.py          # rule + LLM decision logic
-│  ├─ llm_client.py        # thin wrapper for LLM calls
-│  ├─ prompts.py           # stored prompts
-│  ├─ schemas.py           # pydantic request/response models
-│  └─ tests/
-│     ├─ test_decision.py
-│     └─ test_api.py
+│ ├─ main.py
+│ ├─ decision.py
+│ ├─ llm_client.py
+│ ├─ prompts.py
+│ ├─ schemas.py
+│ └─ tests/
+│ ├─ test_decision.py
+│ └─ test_api.py
 ├─ requirements.txt
 ├─ README.md
 └─ sample_tickets.json
 
-3) Core logic (FastAPI + decision code)
+yaml
 
-Code files in this repo are self-contained example you can drop into app/. It includes a rule engine, LLM call placeholder, prompts, and response shaping.
+---
 
-Note: Replace the LLM-call placeholder in llm_client.py with your chosen provider (OpenAI, Anthropic, etc.) and your API key.
+## Core Logic
+All code files in this repo are self-contained FastAPI examples implementing a rule engine, LLM call placeholder, prompts, and structured response formatting.  
+Replace the LLM placeholder in `llm_client.py` with your chosen provider (e.g., OpenAI, Anthropic) and API key.
 
-4) Prompts & helpers (explicit)
+---
 
-Classifier prompt (see prompts.py): used to instruct the model to choose between ai_code_patch and vibe_workflow. The prompt contains deterministic rules and expects JSON output — you should prefer models that support structured JSON output (or parse JSON from model text).
+## Prompts & Helpers
 
-Generation prompts:
+**Classifier Prompt (prompts.py)**  
+Used to decide between `ai_code_patch` and `vibe_workflow`. Prompts expect structured JSON output for easy parsing.
 
-GEN_PATCH_PROMPT asks the model to produce a concise code patch/pseudocode and a checklist as JSON. Limit tokens and ask the model to return only JSON.
+**Generation Prompts**
+- `GEN_PATCH_PROMPT`: Produces concise code patch/pseudocode and a checklist.  
+- `GEN_WORKFLOW_PROMPT`: Generates a compact troubleshooting workflow and checklist.
 
-GEN_WORKFLOW_PROMPT asks for a compact Vibe-coded workflow and checklist.
+### Prompt Engineering Tips
+- Include examples (few-shot) to improve consistency.
+- Ask models to produce **only JSON** and validate with a strict parser.
+- Keep outputs concise and usable — prefer pseudocode over long code patches.
 
-Prompt engineering tips:
+---
 
-Always include examples in the prompt for the model to follow (few-shot).
+## Validation & Testing Before Shipping
 
-Ask the model to produce only JSON; validate with a strict JSON parser and fallback to simpler parsing if it fails.
+### Unit Tests
+- Test `rule_decision` with varied ticket samples (errors, login issues, billing queries).  
+- Test API endpoints for correct schema and response fields.
 
-Constrain length and ask for minimal viable patches (pseudocode ok).
+### Integration / LLM Validation
+- Use recorded LLM responses (mocks) for deterministic CI tests.
+- Validate JSON parsing and output integrity.
 
-5) Validation & testing before shipping
+### Quality & Safety
+- Lint or format generated code patches before review.
+- Always require **human approval** before auto-applying code patches.
+- Verify checklist items are small, actionable, and clear.
 
-Unit tests:
+### Metrics to Track (Post-Deploy)
+- **Decision accuracy** (% correct classification).  
+- **Resolution time improvement** (before/after).  
+- **Human override rate** (% of reclassified tickets).  
+- **LLM hallucination rate** (invalid or irrelevant patches).
 
-Test rule_decision with typical tickets (stack traces, login issues, billing tickets).
+### Validation Steps
+1. Smoke test rule-only scenarios.  
+2. Mock-test LLM responses for structure validation.  
+3. Stage and manually review before rollout.  
+4. Monitor performance metrics after deployment.
 
-Test API endpoints with sample tickets and assert schema and response fields.
+---
 
-Integration / LLM validation:
+## Example Test Cases
 
-Use recorded sample responses (mock LLM) in CI to ensure deterministic tests.
+| Ticket | Input Summary | Expected Decision |
+|--------|----------------|-------------------|
+| A | `Unhandled exception in payments API: TypeError` | `ai_code_patch` |
+| B | `Customer cannot find invoice, need steps to download` | `vibe_workflow` |
+| C | Ambiguous, medium severity | LLM classification |
 
-For each LLM prompt, create expected outputs (gold standard) and check parsing logic.
+---
 
-Quality & safety:
+## How AI Was Used
+- **Decision Augmentation:** LLM used for ambiguous or context-heavy tickets.  
+- **Patch Generation:** Produces concise pseudocode or diffs to assist engineers.  
+- **Workflow Generation:** Writes structured troubleshooting instructions.  
+- **Prompt & Parsing:** Produces machine-usable JSON via structured prompting.
 
-Lint/format generated code patches and run them in a sandbox or static analyzer. Prefer pseudocode or suggested diffs rather than full auto-deploy.
+---
 
-Limit the LLM’s capacity to auto-apply patches. Always require human approval before production change.
+## Trade-offs & Notes
+- **Rule-first:** Fast and predictable, but less flexible.  
+- **LLM-based:** Smarter, but may hallucinate — always gated by human review.  
+- **Security:** Redact sensitive or PII data before LLM calls.  
+- **Latency:** Use async or background tasks for LLM calls to maintain responsiveness.
 
-Verify checklist items are actionable and small (1-3 steps).
+---
 
-Metrics to track (post-deploy):
+## How to Run Locally
 
-Decision accuracy (human-agreed): % of tickets correctly routed.
+```bash
+git clone https://github.com/Vinay152003/vibefi-ticket-processor.git
+cd vibefi-ticket-processor
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+Test an Example Request
+bash
+Copy code
+curl -X POST "http://127.0.0.1:8000/process" \
+-H "Content-Type: application/json" \
+-d '{"channel":"portal","severity":"high","summary":"TypeError in payments module","details":"Unhandled exception when calling API"}'
+Environment Setup
+bash
+Copy code
+export LLM_PROVIDER=openai
+Add your LLM API key in your environment or replace the placeholder inside app/llm_client.py.
 
-Time to resolution (before/after).
+Validation & Scaling Notes
+Cache frequent classification results for performance.
 
-Human override rate: % times operators change the decision.
+Queue heavy LLM operations via background workers (e.g., Celery or Cloud Tasks).
 
-LLM hallucination rate for code (detected as invalid patches).
+Use structured logs to analyze model performance over time.
 
-Validation steps:
-
-Smoke tests — rules-only cases.
-
-LLM mock tests — ensure parsing robust.
-
-Staging with manual review: integrate model outputs but gate deployment behind human approval.
-
-Canary and monitor metrics (errors, overrides).
-
-6) Example test cases (quick)
-
-Ticket A: { channel:"portal", severity:"high", summary:"Unhandled exception in payments api: TypeError at process_payment" }
-
-Expected: ai_code_patch (rule triggers on "TypeError", "exception")
-
-Ticket B: { channel:"email", severity:"low", summary:"Customer cannot find invoice, need steps to download invoice" }
-
-Expected: vibe_workflow
-
-Ticket C: ambiguous medium severity: ask LLM — check its output JSON for decision, confidence, reason.
-
-7) How AI was used (document where it helped)
-
-Decision augmentation: LLM used when rule certainty low to classify ambiguous tickets.
-
-Patch generation: LLM produces code snippet or diff (pseudocode) to accelerate developer remediation drafts.
-
-Workflow generation: LLM writes human-friendly troubleshooting flows.
-
-Prompt / parsing: careful prompts produce structured JSON for machine consumption.
-
-8) Trade-offs & notes
-
-Rule-first: faster, cheaper, predictable, but less flexible.
-
-LLM use: flexible and human-like, but can hallucinate — always gate auto-code application.
-
-Security: never send full customer PII to third-party LLMs without redaction and contractual clearance.
-
-Latency: synchronous LLM calls increase response time; consider async / background tasks for heavy generation and return a provisional answer quickly.
-
-9) How to present to VibeFI AI (what to submit)
-
-Push the code above to a small repo vibefi-ticket-processor with README.md explaining:
-
-How to run locally: uvicorn app.main:app --reload
-
-How to set LLM_PROVIDER and where to wire the actual provider.
-
-Include sample_tickets.json and tests/ with pytest tests.
-
-In your submission note, include:
-
-Where the LLM was used (classifier + generator), and sample prompts (as provided).
-
-Validation plan and safety controls (human-in-the-loop for code patches).
-
-A short note on scaling (cache decisions, queue heavy LLM jobs via background worker like Celery).
-
-10) Quick “reply” text you can paste to VibeFI AI
-
-Hi VibeFI AI team — thanks for the brief. I implemented a small FastAPI service that accepts a ticket JSON, applies a rule-first decision engine (with LLM fallback), and returns {decision, reasoning, checklist}.
+Submission Summary for VibeFI AI
 Repo: https://github.com/Vinay152003/vibefi-ticket-processor
-— includes core logic, prompts, example tickets, and tests.
-Key notes: rules handle high-confidence cases (error traces → ai_code_patch); LLM is used for ambiguous classification and for generating minimal code patches or Vibe-coded workflows. I included validation steps, human-in-the-loop gating for code patches, and test cases. Happy to demo or iterate on the prompt & thresholds.
+
+Includes:
+
+Core logic
+
+Prompts
+
+Example tickets
+
+Test cases
+
+Key points:
+
+Rule-first engine handles clear cases (error traces → ai_code_patch).
+
+LLM fallback handles ambiguity and generates workflows or patches.
+
+Includes validation, safety gating, and human-in-the-loop checks.
+
